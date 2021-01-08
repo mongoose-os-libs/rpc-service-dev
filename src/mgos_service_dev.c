@@ -198,6 +198,52 @@ clean:
   (void) fi;
 }
 
+static void rpc_dev_get_info_handler(struct mg_rpc_request_info *ri, void *cb_arg,
+                                     struct mg_rpc_frame_info *fi,
+                                     struct mg_str args) {
+  struct mbuf mb;
+  char *name = NULL;
+  mbuf_init(&mb, 0);
+  struct json_out out = JSON_OUT_MBUF(&mb);
+  struct mgos_vfs_dev *dev = NULL;
+
+  json_scanf(args.p, args.len, ri->args_fmt, &name);
+
+  if (name == NULL) {
+    mg_rpc_send_errorf(ri, 400, "name is required");
+    ri = NULL;
+    goto clean;
+  }
+
+  if ((dev = mgos_vfs_dev_open(name)) == NULL) {
+    mg_rpc_send_errorf(ri, 500, "dev open failed");
+    goto clean;
+  }
+
+  size_t size = mgos_vfs_dev_get_size(dev);
+  json_printf(&out, "{size: %llu", (unsigned long long) size);
+
+  size_t erase_sizes[MGOS_VFS_DEV_NUM_ERASE_SIZES] = {0};
+  if (mgos_vfs_dev_get_erase_sizes(dev, erase_sizes) == MGOS_VFS_DEV_ERR_NONE) {
+    json_printf(&out, ", erase_sizes: [");
+    for (int i = 0; i < MGOS_VFS_DEV_NUM_ERASE_SIZES; i++) {
+      if (erase_sizes[i] == 0) break;
+      json_printf(&out, "%s%d", (i == 0 ? "" : ", "), (int) erase_sizes[i]);
+    }
+    json_printf(&out, "]");
+  }
+  json_printf(&out, "}");
+
+  mg_rpc_send_responsef(ri, "%.*s", (int) mb.len, mb.buf);
+
+clean:
+  mgos_vfs_dev_close(dev);
+  mbuf_free(&mb);
+  free(name);
+  (void) cb_arg;
+  (void) fi;
+}
+
 bool mgos_rpc_service_dev_init(void) {
   struct mg_rpc *c = mgos_rpc_get_global();
   mg_rpc_add_handler(c, "Dev.Create", "{name: %Q, type: %Q, opts: %Q}",
@@ -210,6 +256,8 @@ bool mgos_rpc_service_dev_init(void) {
   mg_rpc_add_handler(c, "Dev.Erase", "{name: %Q, offset: %lu, len: %lu}",
                      rpc_dev_erase_handler, NULL);
   mg_rpc_add_handler(c, "Dev.Remove", "{name: %Q}", rpc_dev_remove_handler,
+                     NULL);
+  mg_rpc_add_handler(c, "Dev.GetInfo", "{name: %Q}", rpc_dev_get_info_handler,
                      NULL);
   return true;
 }
