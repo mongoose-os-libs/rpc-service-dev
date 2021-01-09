@@ -201,11 +201,13 @@ clean:
 static void rpc_dev_get_info_handler(struct mg_rpc_request_info *ri, void *cb_arg,
                                      struct mg_rpc_frame_info *fi,
                                      struct mg_str args) {
+  size_t size;
   struct mbuf mb;
   char *name = NULL;
   mbuf_init(&mb, 0);
   struct json_out out = JSON_OUT_MBUF(&mb);
   struct mgos_vfs_dev *dev = NULL;
+  size_t erase_sizes[MGOS_VFS_DEV_NUM_ERASE_SIZES] = {0};
 
   json_scanf(args.p, args.len, ri->args_fmt, &name);
 
@@ -220,10 +222,9 @@ static void rpc_dev_get_info_handler(struct mg_rpc_request_info *ri, void *cb_ar
     goto clean;
   }
 
-  size_t size = mgos_vfs_dev_get_size(dev);
+  size = mgos_vfs_dev_get_size(dev);
   json_printf(&out, "{size: %llu", (unsigned long long) size);
 
-  size_t erase_sizes[MGOS_VFS_DEV_NUM_ERASE_SIZES] = {0};
   if (mgos_vfs_dev_get_erase_sizes(dev, erase_sizes) == MGOS_VFS_DEV_ERR_NONE) {
     json_printf(&out, ", erase_sizes: [");
     for (int i = 0; i < MGOS_VFS_DEV_NUM_ERASE_SIZES; i++) {
